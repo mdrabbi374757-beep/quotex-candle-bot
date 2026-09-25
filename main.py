@@ -6,7 +6,7 @@ from pyquotex import Quotex
 
 # ================= কনফিগারেশন =================
 BOT_TOKEN = "8518587756:AAGMOv5UTuCekmx5asuQr7vmVh_KKxFT534"
-CHANNEL_ID = "@your_channel_username"  # quotex_1m_candle_report
+CHANNEL_ID = "@quotex_1m_candle_report"  # আপনার পাবলিক চ্যানেল ইউজারনেম
 
 # আপনার দেওয়া ডেমো অ্যাকাউন্ট তথ্য
 QUOTEX_EMAIL = "quotexmcandlereport@gmail.com"
