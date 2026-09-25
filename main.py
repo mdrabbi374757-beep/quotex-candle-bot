@@ -1,18 +1,34 @@
 import datetime
+import os
+import threading
 import time
+from flask import Flask
 import requests
 import schedule
 from pyquotex import Quotex
 
+# ================= Flask Web Server (Render Port Fix) =================
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return "Quotex Candle Counter Bot is Running Live!"
+
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+
 # ================= কনফিগারেশন =================
 BOT_TOKEN = "8518587756:AAGMOv5UTuCekmx5asuQr7vmVh_KKxFT534"
-CHANNEL_ID = "@quotex_1m_candle_report"  # আপনার পাবলিক চ্যানেল ইউজারনেম
+CHANNEL_ID = "@quotex_1m_candle_report"
 
-# আপনার দেওয়া ডেমো অ্যাকাউন্ট তথ্য
 QUOTEX_EMAIL = "quotexmcandlereport@gmail.com"
 QUOTEX_PASSWORD = "quotexmcandlereport"
 
-ASSET = "USDBRL_otc"  # USD/BRL (OTC)
+ASSET = "USDBRL_otc"
 # ===============================================
 
 
@@ -32,7 +48,6 @@ def send_telegram_msg(text):
 def fetch_and_send_hourly_report():
     print(f"[{datetime.datetime.now()}] Fetching candle data for {ASSET}...")
 
-    # কোটেক্স অ্যাকাউন্টে কানেক্ট করা
     client = Quotex(email=QUOTEX_EMAIL, password=QUOTEX_PASSWORD)
     check_connect, reason = client.connect()
 
@@ -40,7 +55,6 @@ def fetch_and_send_hourly_report():
         print(f"Quotex Connection failed: {reason}")
         return
 
-    # গত ১ ঘণ্টার (৩৬০০ সেকেন্ড) ১ মিনিটের (৬০ সেকেন্ড) ক্যান্ডেল নেওয়া
     candles = client.get_candles(ASSET, 60, 3600, time.time())
 
     green_count = 0
@@ -54,14 +68,12 @@ def fetch_and_send_hourly_report():
 
     client.close()
 
-    # সময় ও তারিখ ফরম্যাটিং
     now = datetime.datetime.now()
     current_date = now.strftime("%d-%m-%Y")
     previous_hour = (now - datetime.timedelta(hours=1)).strftime("%I:00 %p")
     current_hour = now.strftime("%I:00 %p")
     time_range = f"{previous_hour} - {current_hour}"
 
-    # টেলিগ্রাম পোস্ট ফরম্যাট
     caption = (
         f"📊 **Asset:** USD/BRL (OTC)\n"
         f"📅 **তারিখ:** {current_date}\n"
@@ -74,11 +86,19 @@ def fetch_and_send_hourly_report():
     send_telegram_msg(caption)
 
 
-# প্রতি ১ ঘণ্টা পর পর অটো রান করবে
-schedule.every().hour.at(":00").do(fetch_and_send_hourly_report)
+def run_scheduler():
+    schedule.every().hour.at(":00").do(fetch_and_send_hourly_report)
+    print("Quotex Hourly Candle Counter Bot Started...")
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
-print("Quotex Hourly Candle Counter Bot Started...")
 
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+if __name__ == "__main__":
+    # ব্যাকগ্রাউন্ডে শেডিউলার চালু রাখা
+    t = threading.Thread(target=run_scheduler)
+    t.daemon = True
+    t.start()
+
+    # ওয়েব সার্ভার চালু করা (যা রেন্ডারের পোর্ট ওপেন করবে)
+    run_web_server()
