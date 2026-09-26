@@ -6,9 +6,7 @@ import threading
 import time
 import pytz
 import requests
-
-# QuotexPy ক্লায়েন্ট সঠিকভাবে ইমপোর্ট করা
-from quotexpy.client import Quotex
+import schedule
 
 # --- RENDER HEALTH CHECK SERVER ---
 class HealthCheck(BaseHTTPRequestHandler):
@@ -33,107 +31,119 @@ def run_server():
 threading.Thread(target=run_server, daemon=True).start()
 
 # --- CONFIGURATION ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
-CHAT_ID = os.environ.get("CHAT_ID", "").strip()
-QX_EMAIL = os.environ.get("QUOTEX_EMAIL", "").strip()
-QX_PASSWORD = os.environ.get("QUOTEX_PASSWORD", "").strip()
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+CHAT_ID = os.environ.get("CHAT_ID", "")
+EMAIL = os.environ.get("QUOTEX_EMAIL", "quotexmcandlereport@gmail.com")
+PASSWORD = os.environ.get("QUOTEX_PASSWORD", "quotexmcandlereport")
 
+# Candle Storage
 hourly_candles = []
-last_reported_hour = -1
 
 def send_telegram_msg(text):
     if not BOT_TOKEN or not CHAT_ID:
-        print("Error: BOT_TOKEN or CHAT_ID missing!")
+        print("Telegram Bot Token or Chat ID missing!")
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
     try:
-        res = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram API Status: {res.status_code}")
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"Telegram Exception: {e}")
+        print(f"Telegram error: {e}")
 
-async def main_loop():
-    global hourly_candles, last_reported_hour
+def get_quotex_candles():
+    """Quotex থেকে রিয়েলটাইম ক্যান্ডেল সংগ্রহের চেষ্টা করা"""
+    try:
+        from pyquotex import Client
+        client = Client(email=EMAIL, password=PASSWORD)
+        check, reason = client.connect()
+        if check:
+            # USDBRL_otc এর শেষ ৬০টি ১ মিনিটের ক্যান্ডেল নিয়ে আসা
+            candles = client.get_candles("USDBRL_otc", 60)
+            client.close()
+            return candles
+    except Exception as e:
+        print(f"Quotex Fetch Error: {e}")
+    return []
+
+def collect_minute_candle():
+    """প্রতি মিনিটে ক্যান্ডেল ডাটা ট্র্যাক করা"""
+    global hourly_candles
+    candles = get_quotex_candles()
+    if candles:
+        last_candle = candles[-1]
+        open_p = last_candle.get('open', 0)
+        close_p = last_candle.get('close', 0)
+        
+        if close_p > open_p:
+            candle_type = "🟢 Green"
+        elif close_p < open_p:
+            candle_type = "🔴 Red"
+        else:
+            candle_type = "⚪ Doji"
+            
+        now_bd = datetime.now(pytz.timezone('Asia/Dhaka'))
+        time_str = now_bd.strftime("%I:%M %p")
+        hourly_candles.append(f"{time_str} -> {candle_type}")
+        print(f"Collected Candle: {time_str} -> {candle_type}")
+
+def generate_hourly_report():
+    """প্রতি ঘণ্টায় চূড়ান্ত রিপোর্ট তৈরি ও পাঠানো"""
+    global hourly_candles
     tz_bd = pytz.timezone('Asia/Dhaka')
+    now_bd = datetime.now(tz_bd)
+    start_time = (now_bd - timedelta(hours=1)).strftime("%I:00 %p")
+    end_time = now_bd.strftime("%I:00 %p")
+    date_str = now_bd.strftime("%d-%m-%Y")
 
-    # Quotex API কানেকশন
-    client = Quotex(email=QX_EMAIL, password=QX_PASSWORD)
-    check_connect, reason = await client.connect()
-
-    if check_connect:
-        print("✅ Quotex Live Market Data Connected!")
-        send_telegram_msg("✅ <b>Quotex Live Market Data Connected!</b>\nলাইভ ক্যান্ডেল গণনা শুরু হয়েছে।")
+    # যদি লাইব কালেকশন খালি থাকে, ব্যাকআপ হিসেবে সরাসরি ৬০ ক্যান্ডেল আনা
+    if not hourly_candles:
+        raw_candles = get_quotex_candles()
+        green_count = 0
+        red_count = 0
+        list_str = ""
+        
+        for idx, c in enumerate(raw_candles):
+            o, cl = c.get('open', 0), c.get('close', 0)
+            if cl > o:
+                green_count += 1
+                c_str = "🟢 Green"
+            elif cl < o:
+                red_count += 1
+                c_str = "🔴 Red"
+            else:
+                c_str = "⚪ Doji"
+            
+            c_time = (now_bd - timedelta(minutes=60-idx)).strftime("%I:%M %p")
+            list_str += f"{c_time} -> {c_str}\n"
     else:
-        print(f"❌ Quotex Connection Failed: {reason}")
-        send_telegram_msg(f"❌ Quotex কানেকশন ব্যর্থ হয়েছে: {reason}")
-        return
+        green_count = sum(1 for c in hourly_candles if "🟢" in c)
+        red_count = sum(1 for c in hourly_candles if "🔴" in c)
+        list_str = "\n".join(hourly_candles)
 
-    asset = "USD/BRL_otc"
+    report_msg = (
+        f"<b>Quotex USD/BRL OTC 1m Report</b>\n"
+        f"📊 <b>Asset:</b> USD/BRL (OTC)\n"
+        f"📅 <b>তারিখ:</b> {date_str}\n"
+        f"⏰ <b>সময় (BD):</b> {start_time} - {end_time}\n"
+        f"⏱ <b>টাইমফ্রেম:</b> 1 min\n\n"
+        f"📋 <b>প্রতি মিনিটের ক্যান্ডেল লিস্ট:</b>\n"
+        f"{list_str if list_str else 'ডাটা উপলব্ধ নয়'}\n\n"
+        f"📊 <b>মোট হিসাব:</b>\n"
+        f"🟢 Green: {green_count} | 🔴 Red: {red_count}"
+    )
 
+    send_telegram_msg(report_msg)
+    hourly_candles = []  # রিসেট করা
+
+# শিডিউল তৈরি
+schedule.every(1).minutes.do(collect_minute_candle)
+schedule.every().hour.at(":00").do(generate_hourly_report)
+
+def run_scheduler():
     while True:
-        try:
-            now_bd = datetime.now(tz_bd)
-            current_minute = now_bd.minute
-            current_second = now_bd.second
-            current_hour = now_bd.hour
-
-            # প্রতি মিনিটের ০0 সেকেন্ডে Quotex থেকে আসল ক্যান্ডেল ডাটা ফেচ
-            if current_second == 0:
-                time_str = now_bd.strftime("%I:%M %p")
-                
-                # Quotex থেকে ১ মিনিটের ক্যান্ডেল নেওয়া (period 60s)
-                candles = await client.get_candles(asset, 60)
-                if candles:
-                    last_candle = candles[-1]
-                    open_price = last_candle['open']
-                    close_price = last_candle['close']
-
-                    if close_price > open_price:
-                        candle_type = "🟢 Green"
-                    elif close_price < open_price:
-                        candle_type = "🔴 Red"
-                    else:
-                        candle_type = "⚪ Doji"
-
-                    hourly_candles.append(f"{time_str} -> {candle_type}")
-                    print(f"Real Candle [{time_str}]: {candle_type}")
-                
-                await asyncio.sleep(1)
-
-            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে ঘণ্টা রিপোর্ট পোস্ট
-            if current_minute == 0 and current_hour != last_reported_hour:
-                start_time = (now_bd - timedelta(hours=1)).strftime("%I:00 %p")
-                end_time = now_bd.strftime("%I:00 %p")
-                date_str = now_bd.strftime("%d-%m-%Y")
-
-                green_count = sum(1 for c in hourly_candles if "🟢" in c)
-                red_count = sum(1 for c in hourly_candles if "🔴" in c)
-                doji_count = sum(1 for c in hourly_candles if "⚪" in c)
-                list_str = "\n".join(hourly_candles)
-
-                report_msg = (
-                    f"<b>Quotex USD/BRL OTC 1m Report</b>\n"
-                    f"📊 <b>Asset:</b> USD/BRL (OTC)\n"
-                    f"📅 <b>তারিখ:</b> {date_str}\n"
-                    f"⏰ <b>সময় (BD):</b> {start_time} - {end_time}\n"
-                    f"⏱ <b>টাইমফ্রেম:</b> 1 min\n\n"
-                    f"📋 <b>প্রতি মিনিটের ক্যান্ডেল লিস্ট:</b>\n"
-                    f"{list_str if list_str else 'ডাটা পাওয়া যায়নি'}\n\n"
-                    f"📊 <b>মোট হিসাব:</b>\n"
-                    f"🟢 Green: {green_count} | 🔴 Red: {red_count} | ⚪ Doji: {doji_count}"
-                )
-
-                send_telegram_msg(report_msg)
-                last_reported_hour = current_hour
-                hourly_candles = []
-                await asyncio.sleep(2)
-
-        except Exception as e:
-            print(f"Loop Error: {e}")
-
-        await asyncio.sleep(0.5)
+        schedule.run_pending()
+        time.sleep(1)
 
 if __name__ == "__main__":
-    print("Starting Quotex Live Bot...")
-    asyncio.run(main_loop())
+    print("Bot is starting...")
+    run_scheduler()
