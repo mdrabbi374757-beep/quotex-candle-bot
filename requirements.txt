@@ -1,4 +1,4 @@
 requests
 pytz
-QuotexPy
+QuotexPy==1.0.4
 websocket-client
