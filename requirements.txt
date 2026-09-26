@@ -1,5 +1,3 @@
 requests
-schedule
-websocket-client
-flask
 pytz
+quotexapi
