@@ -7,7 +7,6 @@ import threading
 import time
 import pytz
 import requests
-from quotexpy.client import Quotex
 
 # --- RENDER HEALTH CHECK SERVER ---
 class HealthCheck(BaseHTTPRequestHandler):
