@@ -66,12 +66,11 @@ def main_loop():
             if current_second == 0:
                 time_str = now_bd.strftime("%I:%M %p")
                 
-                # মার্কেট ক্যান্ডেল কালার ট্র্যাকিং
+                # ক্যান্ডেল ট্র্যাকিং
                 candle_type = random.choice(["🟢 Green", "🔴 Red"]) 
                 hourly_candles.append(f"{time_str} -> {candle_type}")
                 print(f"Recorded: {time_str} -> {candle_type}")
                 
-                # পরপর ডুপ্লিকেট এড়াতে ১ সেকেন্ড পজ
                 time.sleep(1)
 
             # ২. প্রতি ঘণ্টার :00 মিনিটে রিপোর্ট পাঠানো (বাংলাদেশ সময় অনুযায়ী)
@@ -98,7 +97,6 @@ def main_loop():
 
                 send_telegram_msg(report_msg)
                 
-                # আপডেট ও মেমোরি ক্লিয়ার
                 last_reported_hour = current_hour
                 hourly_candles = []
                 time.sleep(2)
