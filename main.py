@@ -6,7 +6,9 @@ import threading
 import time
 import pytz
 import requests
-from quotexpy import QuotexPy
+
+# QuotexPy ক্লায়েন্ট সঠিকভাবে ইমপোর্ট করা
+from quotexpy.client import Quotex
 
 # --- RENDER HEALTH CHECK SERVER ---
 class HealthCheck(BaseHTTPRequestHandler):
@@ -56,7 +58,7 @@ async def main_loop():
     tz_bd = pytz.timezone('Asia/Dhaka')
 
     # Quotex API কানেকশন
-    client = QuotexPy(email=QX_EMAIL, password=QX_PASSWORD)
+    client = Quotex(email=QX_EMAIL, password=QX_PASSWORD)
     check_connect, reason = await client.connect()
 
     if check_connect:
