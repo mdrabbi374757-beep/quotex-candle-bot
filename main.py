@@ -6,7 +6,7 @@ import threading
 import time
 import pytz
 import requests
-from quotexpy import Quotex
+from quotexpy import QuotexPy
 
 # --- RENDER HEALTH CHECK SERVER ---
 class HealthCheck(BaseHTTPRequestHandler):
@@ -56,7 +56,7 @@ async def main_loop():
     tz_bd = pytz.timezone('Asia/Dhaka')
 
     # Quotex API কানেকশন
-    client = Quotex(email=QX_EMAIL, password=QX_PASSWORD)
+    client = QuotexPy(email=QX_EMAIL, password=QX_PASSWORD)
     check_connect, reason = await client.connect()
 
     if check_connect:
@@ -99,7 +99,7 @@ async def main_loop():
                 
                 await asyncio.sleep(1)
 
-            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে ঘন্টা রিপোর্ট পোস্ট
+            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে ঘণ্টা রিপোর্ট পোস্ট
             if current_minute == 0 and current_hour != last_reported_hour:
                 start_time = (now_bd - timedelta(hours=1)).strftime("%I:00 %p")
                 end_time = now_bd.strftime("%I:00 %p")
