@@ -2,11 +2,11 @@ import asyncio
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
-import random
 import threading
 import time
 import pytz
 import requests
+from quotexpy import Quotex
 
 # --- RENDER HEALTH CHECK SERVER ---
 class HealthCheck(BaseHTTPRequestHandler):
@@ -33,13 +33,15 @@ threading.Thread(target=run_server, daemon=True).start()
 # --- CONFIGURATION ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 CHAT_ID = os.environ.get("CHAT_ID", "").strip()
+QX_EMAIL = os.environ.get("QUOTEX_EMAIL", "").strip()
+QX_PASSWORD = os.environ.get("QUOTEX_PASSWORD", "").strip()
 
 hourly_candles = []
 last_reported_hour = -1
 
 def send_telegram_msg(text):
     if not BOT_TOKEN or not CHAT_ID:
-        print("Error: BOT_TOKEN or CHAT_ID missing in Environment!")
+        print("Error: BOT_TOKEN or CHAT_ID missing!")
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
@@ -47,19 +49,25 @@ def send_telegram_msg(text):
         res = requests.post(url, json=payload, timeout=10)
         print(f"Telegram API Status: {res.status_code}")
     except Exception as e:
-        print(f"Telegram Send Exception: {e}")
+        print(f"Telegram Exception: {e}")
 
-def main_loop():
+async def main_loop():
     global hourly_candles, last_reported_hour
     tz_bd = pytz.timezone('Asia/Dhaka')
-    
-    # বোট কানেক্ট হওয়ার সাথে সাথে কনফার্মেশন মেসেজ
-    now_bd = datetime.now(tz_bd)
-    send_telegram_msg(
-        f"✅ <b>Quotex Candle Bot Connected!</b>\n"
-        f"⏰ বর্তমান সময় (BD): {now_bd.strftime('%I:%M %p')}\n"
-        f"বোটের ডাটা কালেকশন শুরু হয়েছে। আগামী ঘণ্টার কাঁটায় কাঁটায় পোস্ট আসবে।"
-    )
+
+    # Quotex API কানেকশন
+    client = Quotex(email=QX_EMAIL, password=QX_PASSWORD)
+    check_connect, reason = await client.connect()
+
+    if check_connect:
+        print("✅ Quotex Live Market Data Connected!")
+        send_telegram_msg("✅ <b>Quotex Live Market Data Connected!</b>\nলাইভ ক্যান্ডেল গণনা শুরু হয়েছে।")
+    else:
+        print(f"❌ Quotex Connection Failed: {reason}")
+        send_telegram_msg(f"❌ Quotex কানেকশন ব্যর্থ হয়েছে: {reason}")
+        return
+
+    asset = "USD/BRL_otc"
 
     while True:
         try:
@@ -67,16 +75,31 @@ def main_loop():
             current_minute = now_bd.minute
             current_second = now_bd.second
             current_hour = now_bd.hour
-            
-            # প্রতি মিনিটের ০-তম সেকেন্ডে ক্যান্ডেল ডাটা স্টোর
+
+            # প্রতি মিনিটের ০0 সেকেন্ডে Quotex থেকে আসল ক্যান্ডেল ডাটা ফেচ
             if current_second == 0:
                 time_str = now_bd.strftime("%I:%M %p")
-                candle_type = random.choice(["🟢 Green", "🔴 Red"]) 
-                hourly_candles.append(f"{time_str} -> {candle_type}")
-                print(f"Recorded: {time_str} -> {candle_type}")
-                time.sleep(1)
+                
+                # Quotex থেকে ১ মিনিটের ক্যান্ডেল নেওয়া (period 60s)
+                candles = await client.get_candles(asset, 60)
+                if candles:
+                    last_candle = candles[-1]
+                    open_price = last_candle['open']
+                    close_price = last_candle['close']
 
-            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে রিপোর্ট পাঠানো
+                    if close_price > open_price:
+                        candle_type = "🟢 Green"
+                    elif close_price < open_price:
+                        candle_type = "🔴 Red"
+                    else:
+                        candle_type = "⚪ Doji"
+
+                    hourly_candles.append(f"{time_str} -> {candle_type}")
+                    print(f"Real Candle [{time_str}]: {candle_type}")
+                
+                await asyncio.sleep(1)
+
+            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে ঘন্টা রিপোর্ট পোস্ট
             if current_minute == 0 and current_hour != last_reported_hour:
                 start_time = (now_bd - timedelta(hours=1)).strftime("%I:00 %p")
                 end_time = now_bd.strftime("%I:00 %p")
@@ -84,6 +107,7 @@ def main_loop():
 
                 green_count = sum(1 for c in hourly_candles if "🟢" in c)
                 red_count = sum(1 for c in hourly_candles if "🔴" in c)
+                doji_count = sum(1 for c in hourly_candles if "⚪" in c)
                 list_str = "\n".join(hourly_candles)
 
                 report_msg = (
@@ -93,21 +117,21 @@ def main_loop():
                     f"⏰ <b>সময় (BD):</b> {start_time} - {end_time}\n"
                     f"⏱ <b>টাইমফ্রেম:</b> 1 min\n\n"
                     f"📋 <b>প্রতি মিনিটের ক্যান্ডেল লিস্ট:</b>\n"
-                    f"{list_str if list_str else 'ডাটা সংগ্রহ করা হচ্ছে...'}\n\n"
+                    f"{list_str if list_str else 'ডাটা পাওয়া যায়নি'}\n\n"
                     f"📊 <b>মোট হিসাব:</b>\n"
-                    f"🟢 Green: {green_count} | 🔴 Red: {red_count}"
+                    f"🟢 Green: {green_count} | 🔴 Red: {red_count} | ⚪ Doji: {doji_count}"
                 )
 
                 send_telegram_msg(report_msg)
                 last_reported_hour = current_hour
                 hourly_candles = []
-                time.sleep(2)
+                await asyncio.sleep(2)
 
         except Exception as e:
             print(f"Loop Error: {e}")
 
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)
 
 if __name__ == "__main__":
-    print("Starting Bot...")
-    main_loop()
+    print("Starting Quotex Live Bot...")
+    asyncio.run(main_loop())
