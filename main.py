@@ -31,34 +31,34 @@ def run_server():
 threading.Thread(target=run_server, daemon=True).start()
 
 # --- CONFIGURATION ---
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-CHAT_ID = os.environ.get("CHAT_ID", "")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
+CHAT_ID = os.environ.get("CHAT_ID", "").strip()
 
 hourly_candles = []
 last_reported_hour = -1
 
 def send_telegram_msg(text):
     if not BOT_TOKEN or not CHAT_ID:
-        print("Telegram Bot Token or Chat ID missing!")
+        print("Error: BOT_TOKEN or CHAT_ID missing in Environment!")
         return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram Response Status: {res.status_code}")
+        print(f"Telegram API Status: {res.status_code}")
     except Exception as e:
-        print(f"Telegram Send Error: {e}")
+        print(f"Telegram Send Exception: {e}")
 
 def main_loop():
     global hourly_candles, last_reported_hour
     tz_bd = pytz.timezone('Asia/Dhaka')
     
-    # বোট ডিপ্লয় হওয়ামাত্রই কানেকশন ভেরিফিকেশন মেসেজ
+    # বোট কানেক্ট হওয়ার সাথে সাথে কনফার্মেশন মেসেজ
     now_bd = datetime.now(tz_bd)
     send_telegram_msg(
-        f"✅ <b>Quotex Candle Bot Connected & Active!</b>\n"
-        f"⏰ বর্তমান সময় (BD): {now_bd.strftime('%I:%M %p')}\n"
-        f"বোট এখন সচল আছে। পরবর্তী কাঁটায় কাঁটায় ঘণ্টার শুরুতে রিপোর্ট আসবে।"
+        f"✅ <b>Quotex Candle Bot Connected!</b>\n"
+        f"⏰ বর্তমান সময় (BD): {now_bd.strftime('%I:%M %p')}\n"
+        f"বোটের ডাটা কালেকশন শুরু হয়েছে। আগামী ঘণ্টার কাঁটায় কাঁটায় পোস্ট আসবে।"
     )
 
     while True:
@@ -109,5 +109,5 @@ def main_loop():
         time.sleep(0.5)
 
 if __name__ == "__main__":
-    print("Bot starting with BD Timezone tracking...")
+    print("Starting Bot...")
     main_loop()
