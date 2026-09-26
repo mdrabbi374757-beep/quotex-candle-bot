@@ -95,7 +95,7 @@ def generate_hourly_report():
     end_time = now_bd.strftime("%I:00 %p")
     date_str = now_bd.strftime("%d-%m-%Y")
 
-    # যদি লাইব কালেকশন খালি থাকে, ব্যাকআপ হিসেবে সরাসরি ৬০ ক্যান্ডেল আনা
+    # যদি লাইভ কালেকশন খালি থাকে, ব্যাকআপ হিসেবে সরাসরি ৬০ ক্যান্ডেল আনা
     if not hourly_candles:
         raw_candles = get_quotex_candles()
         green_count = 0
