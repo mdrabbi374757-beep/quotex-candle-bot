@@ -1,4 +1,5 @@
-websocket-client
 requests
 schedule
+websocket-client
 flask
+pytz
