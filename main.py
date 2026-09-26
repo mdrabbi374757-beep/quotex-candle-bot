@@ -7,7 +7,7 @@ import time
 import pytz
 import requests
 
-# QuotexPy ইমপোর্ট
+# Quotex ইমপোর্ট
 from quotexpy import Quotex
 
 # --- RENDER HEALTH CHECK SERVER ---
@@ -57,9 +57,14 @@ async def main_loop():
     global hourly_candles, last_reported_hour
     tz_bd = pytz.timezone('Asia/Dhaka')
 
-    # Quotex API কানেকশন
-    client = Quotex(email=QX_EMAIL, password=QX_PASSWORD)
-    check_connect, reason = await client.connect()
+    # Quotex API কানেকশন (headless=True দেওয়া হয়েছে যেন ব্রাউজার ব্যাকগ্রাউন্ডে চলে)
+    client = Quotex(email=QX_EMAIL, password=QX_PASSWORD, headless=True)
+    
+    try:
+        check_connect, reason = await client.connect()
+    except Exception as e:
+        check_connect = False
+        reason = str(e)
 
     if check_connect:
         print("✅ Quotex Live Market Data Connected!")
@@ -78,11 +83,11 @@ async def main_loop():
             current_second = now_bd.second
             current_hour = now_bd.hour
 
-            # প্রতি মিনিটের ০0 সেকেন্ডে Quotex থেকে আসল ক্যান্ডেল ডাটা ফেচ
+            # প্রতি মিনিটের ০০ সেকেন্ডে Quotex থেকে আসল ক্যান্ডেল ডাটা ফেচ
             if current_second == 0:
                 time_str = now_bd.strftime("%I:%M %p")
                 
-                # Quotex থেকে ১ মিনিটের ক্যান্ডেল নেওয়া (period 60s)
+                # Quotex থেকে ১ মিনিটের ক্যান্ডেল নেওয়া
                 candles = await client.get_candles(asset, 60)
                 if candles:
                     last_candle = candles[-1]
@@ -101,7 +106,7 @@ async def main_loop():
                 
                 await asyncio.sleep(1)
 
-            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে ঘণ্টা রিপোর্ট পোস্ট
+            # প্রতি ঘণ্টার :০০ মিনিটে টেলিগ্রামে ঘণ্টা রিপোর্ট পোস্ট
             if current_minute == 0 and current_hour != last_reported_hour:
                 start_time = (now_bd - timedelta(hours=1)).strftime("%I:00 %p")
                 end_time = now_bd.strftime("%I:00 %p")
