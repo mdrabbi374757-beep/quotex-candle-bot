@@ -1,3 +1,4 @@
 requests
 pytz
-git+https://github.com/carlos-vitor/QuotexPy.git
+QuotexPy
+websocket-client
