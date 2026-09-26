@@ -45,7 +45,7 @@ def send_telegram_msg(text):
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
     try:
         res = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram Response: {res.status_code}")
+        print(f"Telegram Response Status: {res.status_code}")
     except Exception as e:
         print(f"Telegram Send Error: {e}")
 
@@ -53,9 +53,13 @@ def main_loop():
     global hourly_candles, last_reported_hour
     tz_bd = pytz.timezone('Asia/Dhaka')
     
-    # বোট চালু হওয়ামাত্রই একটি টেস্ট মেসেজ পাঠানো
+    # বোট ডিপ্লয় হওয়ামাত্রই কানেকশন ভেরিফিকেশন মেসেজ
     now_bd = datetime.now(tz_bd)
-    send_telegram_msg(f"✅ <b>Quotex Candle Bot Active!</b>\n⏰ বর্তমান সময় (BD): {now_bd.strftime('%I:%M %p')}\nবোট সঠিকভাবে কাজ করছে। পরবর্তী ঘণ্টার শুরুতেই পূর্ণাঙ্গ রিপোর্ট আসবে।")
+    send_telegram_msg(
+        f"✅ <b>Quotex Candle Bot Connected & Active!</b>\n"
+        f"⏰ বর্তমান সময় (BD): {now_bd.strftime('%I:%M %p')}\n"
+        f"বোট এখন সচল আছে। পরবর্তী কাঁটায় কাঁটায় ঘণ্টার শুরুতে রিপোর্ট আসবে।"
+    )
 
     while True:
         try:
@@ -64,7 +68,7 @@ def main_loop():
             current_second = now_bd.second
             current_hour = now_bd.hour
             
-            # প্রতি মিনিটের ০-তম সেকেন্ডে ক্যান্ডেল ডাটা রাখা
+            # প্রতি মিনিটের ০-তম সেকেন্ডে ক্যান্ডেল ডাটা স্টোর
             if current_second == 0:
                 time_str = now_bd.strftime("%I:%M %p")
                 candle_type = random.choice(["🟢 Green", "🔴 Red"]) 
@@ -72,7 +76,7 @@ def main_loop():
                 print(f"Recorded: {time_str} -> {candle_type}")
                 time.sleep(1)
 
-            # প্রতি ঘণ্টার :00 মিনিটে রিপোর্ট পাঠানো
+            # প্রতি ঘণ্টার :00 মিনিটে টেলিগ্রামে রিপোর্ট পাঠানো
             if current_minute == 0 and current_hour != last_reported_hour:
                 start_time = (now_bd - timedelta(hours=1)).strftime("%I:00 %p")
                 end_time = now_bd.strftime("%I:00 %p")
