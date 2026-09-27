@@ -49,22 +49,6 @@ def send_telegram_msg(text):
     except Exception as e:
         print(f"Telegram Send Exception: {e}")
 
-# --- LIVE CANDLE FETCH ENGINE ---
-def get_live_candle():
-    try:
-        # USD/BRL প্রাইস এপিআই ট্রাই করা
-        res = requests.get("https://api.exchangerate-api.com/v4/latest/USD", timeout=5)
-        if res.status_code == 200:
-            rate = res.json().get("rates", {}).get("BRL", 0)
-            # লাস্ট ডিজিটের ওপর ভিত্তি করে ক্যান্ডেল ট্রেন্ড নির্ণয়
-            last_digit = int(str(int(rate * 100000))[-1])
-            return "🟢 Green" if last_digit % 2 == 0 else "🔴 Red"
-    except Exception as e:
-        print(f"API Error: {e}")
-    
-    # ব্যাকআপ লজিক
-    return random.choice(["🟢 Green", "🔴 Red"])
-
 # --- MAIN LOOP ---
 def main_loop():
     global hourly_candles, last_reported_hour
@@ -72,9 +56,9 @@ def main_loop():
     
     now_bd = datetime.now(tz_bd)
     send_telegram_msg(
-        f"✅ <b>Quotex Candle Bot Updated & Connected!</b>\n"
+        f"✅ <b>Quotex Candle Bot Updated!</b>\n"
         f"⏰ বর্তমান সময় (BD): {now_bd.strftime('%I:%M %p')}\n"
-        f"ডাটা কালেকশন সচল করা হয়েছে।"
+        f"ক্যান্ডেল ডাটা কালেকশন সচল হয়েছে।"
     )
 
     while True:
@@ -87,7 +71,9 @@ def main_loop():
             # প্রতি মিনিটের ০-তম সেকেন্ডে ক্যান্ডেল ডাটা স্টোর
             if current_second == 0:
                 time_str = now_bd.strftime("%I:%M %p")
-                candle_type = get_live_candle()
+                
+                # ৫০-৫০ র্যান্ডম সিলেকশন (Green / Red)
+                candle_type = random.choice(["🟢 Green", "🔴 Red"])
                 
                 hourly_candles.append(f"{time_str} -> {candle_type}")
                 print(f"Recorded: {time_str} -> {candle_type}")
